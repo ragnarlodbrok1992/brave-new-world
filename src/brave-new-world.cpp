@@ -9,6 +9,7 @@
 #pragma warning(pop)
 
 #include <stdio.h>
+#include <iostream>
 
 // --------------------- ENGINE CONSTANTS
 constexpr int RATIO_WIDTH = 16;
@@ -24,13 +25,15 @@ const char* GAME_TITLE = "Brave New World";
 #define NEAR_PLANE 0.1f
 #define FAR_PLANE 1000.0f
 
-#define CAMERA_YAW_DEFAULT -90.0f
-#define CAMERA_PITCH_DEFAULT 0.0f
+#define CAMERA_YAW_DEFAULT -54.0f // TODO: Yaw and pitch should be set according to starting front or other way around?
+#define CAMERA_PITCH_DEFAULT -27.0f // TODO: Maybe thouse values should be entangled in some way
 #define CAMERA_SPEED_DEFAULT 2.5f
 #define CAMERA_SENSITIVITY_DEFAULT 0.1f
 #define CAMERA_FOV_DEFAULT 45.0f
-#define CAMERA_POSITION_DEFAULT glm::vec3(0.0f, 0.0f, 3.0f)
-#define CAMERA_FRONT_DEFAULT glm::vec3(0.0f, 0.0f, -1.0f)
+// #define CAMERA_POSITION_DEFAULT glm::vec3(0.0f, 0.0f, 3.0f)
+// #define CAMERA_FRONT_DEFAULT glm::vec3(0.0f, 0.0f, 0.0f)
+#define CAMERA_POSITION_DEFAULT glm::vec3(-10.0f, 9.5f, 14.0f)
+#define CAMERA_FRONT_DEFAULT glm::vec3(0.5f, -0.45f, -0.7f)
 #define CAMERA_WORLD_UP_DEFAULT glm::vec3(0.0f, 1.0f, 0.0f)
 
 // #define MOUSE_SENSITIVITY_DEFAULT 0.1f
@@ -72,6 +75,9 @@ ShaderData shaderData = {};
 RenderData renderData = {};
 CameraData cameraData = {};
 
+// Forward declaration of functions that operate on global data
+void print_camera_position_and_front(CameraData*);
+
 // Engine - global data - time values
 float delta_time = 0.0f;
 float last_frame = 0.0f;
@@ -87,12 +93,10 @@ void process_input(GLFWwindow* window) {
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
 
+	static bool key_was_pressed = false;
+
 	// Camera movements
 	float camera_speed = static_cast<float>(cameraData.speed * delta_time);
-	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-		cameraData.pos += camera_speed * cameraData.front;
-	if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-		cameraData.pos -= camera_speed * cameraData.front;
 	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
 		cameraData.pos -= glm::normalize(glm::cross(cameraData.front, cameraData.right)) * camera_speed;
 	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
@@ -101,6 +105,28 @@ void process_input(GLFWwindow* window) {
 		cameraData.pos -= glm::normalize(glm::cross(cameraData.front, cameraData.up)) * camera_speed;
 	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
 		cameraData.pos += glm::normalize(glm::cross(cameraData.front, cameraData.up)) * camera_speed;
+
+	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
+		cameraData.fov -= static_cast<float>(CAMERA_SPEED_DEFAULT) * CAMERA_SENSITIVITY_DEFAULT;
+	}
+	if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
+		cameraData.fov += static_cast<float>(CAMERA_SPEED_DEFAULT) * CAMERA_SENSITIVITY_DEFAULT;
+	}
+
+	// Helper stuff
+	if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
+		// printf("Action of P key: %x\n", glfwGetKey(window, GLFW_KEY_P));
+		if (!key_was_pressed) {
+			print_camera_position_and_front(&cameraData);
+			key_was_pressed = true;
+		}
+	} else if (glfwGetKey(window, GLFW_KEY_P) == GLFW_RELEASE) {
+		key_was_pressed = false;
+	}
+
+	// Check fovs
+	if (cameraData.fov < 1.0f) cameraData.fov = 1.0f;
+	if (cameraData.fov > 45.0f) cameraData.fov = 45.0f;
 }
 
 // Mouse values
@@ -115,7 +141,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 	(void) window;
 
 	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-		printf("Mouse button pressed!\n");
+		// printf("Mouse button pressed!\n");
 		left_mouse_button_down = true;
 	} else {
 		left_mouse_button_down = false;
@@ -123,12 +149,21 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 	}
 }
 
+void mouse_scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
+	(void) window;
+
+	// Move forward (into the screen) or backwards (to my face) depending on what?
+	// printf("Mouse scroll callback! x_offset --> %f, y_offset --> %f\n", xoffset, yoffset);
+	float camera_speed = static_cast<float>(cameraData.speed * delta_time) * CAMERA_SPEED_DEFAULT;
+	cameraData.pos += (camera_speed * static_cast<float>(yoffset)) * cameraData.front;
+}
+
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
 	(void) window; 
 
 	if (!left_mouse_button_down) return;
 
-	printf("Last mouse pos --> x: %f, y: %f\n", last_mouse_pos_x, last_mouse_pos_y);
+	// printf("Last mouse pos --> x: %f, y: %f\n", last_mouse_pos_x, last_mouse_pos_y);
 
 	if (first_mouse) {
 		printf("First mouse!\n");
@@ -162,6 +197,13 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
 	cameraData.front = glm::normalize(front);
 }
 
+// Printout helper functions
+void print_camera_position_and_front(CameraData* cd) {
+	printf("Using ugly iostream to see where camera is to change this value...\n");
+	printf("Camera position: x --> %f, y --> %f, z --> %f\n", cd->pos.x, cd->pos.y, cd->pos.z);
+	printf("Camera front:    x --> %f, y --> %f, z --> %f\n", cd->front.x, cd->front.y, cd->front.z);
+	printf("Camera yaw and pitch: yaw --> %f, pitch --> %f\n", cd->yaw, cd->pitch);
+}
 
 void openGl_GetError(openGl_ErrorType et, unsigned int id) {
 	char infoLog[512];
@@ -343,7 +385,7 @@ void initialize_camera(CameraData* camera) {
 	camera->fov         = CAMERA_FOV_DEFAULT;
 
 	camera->pos      = CAMERA_POSITION_DEFAULT;
-	camera->front    = CAMERA_FRONT_DEFAULT;
+	camera->front    = CAMERA_FRONT_DEFAULT; // TODO fix - this get's recalculated in update_camera_vectors because of yaw and pitch
 	camera->world_up = CAMERA_WORLD_UP_DEFAULT;
 
 	update_camera_vectors(camera);
@@ -466,12 +508,14 @@ int main() {
 
 	glfwMakeContextCurrent(window); // Only after this call we can initialize GLAD!
 	
-#pragma warning(suppress: 5039)
+	// OpenGL callback
+	// TODO: find a way to remove those filthy pragmas? Macro maybe?
+#pragma warning(push, 0)
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-#pragma warning(suppress: 5039)
 	glfwSetCursorPosCallback(window, mouse_callback);
-#pragma warning(suppress: 5039)
 	glfwSetMouseButtonCallback(window, mouse_button_callback);
+	glfwSetScrollCallback(window, mouse_scroll_callback);
+#pragma pop
 
 #pragma warning(suppress: 4191)
 	if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
@@ -526,6 +570,8 @@ int main() {
 		// Update camera projection
 		update_camera_vectors(&cameraData);
 		glm::mat4 view = glm::lookAt(cameraData.pos, cameraData.pos + cameraData.front, cameraData.up);
+		glm::mat4 projection = glm::perspective(glm::radians(cameraData.fov),
+				(float) SCREEN_WIDTH / (float) SCREEN_HEIGHT, NEAR_PLANE, FAR_PLANE);
 
 		// Render - the rest of stuff
 		glUseProgram(shaderData.shader_program);
